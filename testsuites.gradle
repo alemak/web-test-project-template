@@ -1,0 +1,18 @@
+task BuildABear()<<{
+    runtests()
+}
+task SanityEnv1(dependsOn: ['environmentenv1','build','suiteSanity' ] )<< {
+    runtests()
+}
+task SanityEnv1FF(dependsOn: ['webdriverFirefox','environmentenv1','build','suiteSanity' ] )<< {
+    runtests()
+}
+task InsanityEnv2(dependsOn: ['environmentenv2','build','suiteInsSanity' ] )<< {
+    runtests()
+}
+task MrpIntlAllDev(dependsOn: ['environmentmrpdev', 'regionINTL', 'build', 'suiteMrpAll'])<<{
+    runtests()
+}
+task MrpAllLsr(dependsOn:['environmentmrplsr', 'build', 'suiteMrpAll'])<<{
+    runtests()
+}

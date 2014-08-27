@@ -1,0 +1,49 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:p="http://www.springframework.org/schema/p"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context-3.1.xsd">
+
+
+    <!-- Components included from testingutils.jar -->
+    <context:component-scan base-package="com.netaporter.test.utils.cucumber"/>
+    <context:component-scan base-package="com.netaporter.test.utils.pages"/>
+
+    <!--Components for this project (pages, steps etc)-->
+    <context:component-scan base-package="com.netaporter.pages"/>
+    <context:component-scan base-package="com.netaporter.cucumber.steps"/>
+
+    <context:annotation-config />
+
+    <bean class="org.springframework.beans.factory.config.CustomScopeConfigurer">
+        <property name="scopes">
+            <map>
+                <entry key="cucumber-glue">
+                    <bean class="cucumber.runtime.java.spring.GlueCodeScope"/>
+                </entry>
+            </map>
+        </property>
+    </bean>
+
+    <bean id="webDriverFactory" class="com.netaporter.test.utils.pages.driver.WebDriverFactory" scope="cucumber-glue">
+        <constructor-arg name="driverName" value="${webdriver:chrome}"/>  <!-- valid values: chrome or firefox or appium -->
+        <constructor-arg name="withProxy" value="false" />
+    </bean>
+    <bean id="testCardFactory" class="com.netaporter.test.utils.factories.TestCardFactory" scope="cucumber-glue">
+    </bean>
+
+
+    <beans profile="env1">
+        <context:property-placeholder location="classpath:environments/env1.properties" ignore-unresolvable="true" />
+    </beans>
+    <beans profile="mrpdev">
+        <context:property-placeholder location="classpath:environments/mrpdev.properties" ignore-unresolvable="true" />
+    </beans>
+
+    <beans profile="mrplsr">
+        <context:property-placeholder location="classpath:environments/mrplsr.properties" ignore-unresolvable="true" />
+    </beans>
+
+</beans>

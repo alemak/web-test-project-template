@@ -1,0 +1,166 @@
+project.description = 'Web test project template'
+project.group = 'com.netaporter'
+project.version = "$version"
+
+apply plugin: "java"
+apply plugin: "idea"
+
+project.ext.set('sourceCompatibility', "1.8")
+project.ext.set('targetCompatibility', "1.8")
+
+
+repositories {
+    maven { url 'http://artifactory.dave.net-a-porter.com:8081/artifactory/repo'}
+}
+
+
+dependencies {
+
+    compile group: 'com.netaporter', name:'testingutils', version: '2.0.2-SNAPSHOT', changing: true
+
+
+}
+
+configurations {
+    cucumberRuntime {
+        extendsFrom testRuntime
+    }
+}
+//disable the default gradle test task that would trigger junit tests
+test.enabled = false
+
+project.ext.set("brand", "")
+project.ext.set("webdriver", "")
+project.ext.set("region","")
+project.ext.set("environment","")
+project.ext.set("suite", "")
+project.ext.set("configFile", "testconfig.groovy")
+project.ext.set("rerunFile", "test-results/rerun.txt")
+
+//Include the 'suites'gradle build file
+apply from: 'testsuites.gradle'
+
+//######################## RULES ###############################################
+
+tasks.addRule("Pattern: webdriver<wd>"){String taskName ->
+    if(taskName.startsWith("webdriver")){
+        task(taskName)<<{
+            description 'Sets up the webdriver variable for the test run'
+            println("Using webdriver: " + (taskName - 'webdriver'))
+            project.webdriver = (taskName - 'webdriver').toLowerCase()
+        }
+    }
+}
+
+tasks.addRule("Pattern: environment<env>"){String taskName ->
+    if(taskName.startsWith("environment")){
+        task(taskName)<<{
+            description 'Sets up the environment (nap-napdev, mrp-mrpdev etc) variable for the test run'
+            println("Using environment: " + (taskName - 'environment'))
+            String env = (taskName - 'environment')
+            project.environment =  project.ext.get("environment") + env
+            println("setting spring.profiles.active: " + project.environment)
+        }
+
+    }
+
+}
+
+tasks.addRule("Pattern: region<reg>"){String taskName ->
+    if(taskName.startsWith("region")){
+        task(taskName)<<{
+            description 'Sets up the region (INTL, AM, APAC) variable for the test run'
+            println("Using region: " + (taskName - 'region'))
+            project.region = (taskName - 'region').toUpperCase()
+        }
+
+    }
+}
+tasks.addRule("Pattern: suite<s>"){String taskName ->
+    if(taskName.startsWith("suite")){
+        task(taskName)<<{
+            description 'Sets up the configuration name (glue, tags, path) for the test run'
+            println("Using suite: " + (taskName - 'suite'))
+            project.suite = (taskName - 'suite').toLowerCase()
+        }
+
+    }
+
+}
+//####################################################################################################
+
+project.ext.runtests = {
+    println("Running test suite: " +
+            " - " + project.ext.region +
+            " - " + project.ext.environment +
+            " - " + project.ext.suite)
+    javaexec {
+        classpath = configurations.cucumberRuntime + sourceSets.main.output + sourceSets.test.output + sourceSets.test.runtimeClasspath
+        ignoreExitValue = true;
+        println("configFile: " + project.ext.get("configFile"))
+        def config = new ConfigSlurper(project.ext.get("suite")).parse((new File(project.ext.get("configFile")).toURI()).toURL())
+        println(config)
+        environment('DISPLAY', ':0.0')
+        println("Process environment:" + environment)
+        systemProperty 'spring.profiles.active', project.ext.get("environment")
+        if (project.ext.get("webdriver") != "") {
+            systemProperty 'webdriver', project.ext.get("webdriver")
+        }
+        systemProperty 'generateReport', 'true'
+        systemProperty 'rerun', System.getProperty('rerun')
+        if (project.ext.get("region") != "") systemProperty 'region', project.ext.get("region")
+        main = "cucumber.api.cli.Main"
+        List<String> arglist = new ArrayList<String>();
+        def regfoldername = project.ext.region == "" ? "NonChannelized" : project.ext.region
+        if ((System.getProperty("rerun") == "true")) {
+            regfoldername = regfoldername + "/rerun"
+        }
+        //Path to the location of json file for cucumber-reproting
+        def cucumberReportingPath = "test-results/cucumber/" +  regfoldername + "/cucumber.json"
+        //Set up report formats
+        def formats = "pretty " + " junit:test-results/" + regfoldername + "-results.xml" +
+                " html:test-results/cucumber/" + regfoldername +
+                " com.netaporter.test.utils.cucumber.formatters.JSONChannelizedNAPFormatter:" +
+                cucumberReportingPath + " rerun:" + project.ext.get("rerunFile")
+        systemProperty 'jsonReportPaths', cucumberReportingPath
+
+        //Parse the test configuration groovy file
+        def addKeyClosure = { list, key, str ->
+            try {
+                for (arg in str.tokenize()) {
+                    list.add(key)
+                    list.add(arg)
+                }
+
+            } catch (Exception e) {
+                throw new Exception("Exception while looking for suite " + project.ext.suite +
+                        " in file " + project.ext.get("configFile") + " \n Could not tokenize the string: " + str + "for key: " + key)
+            }
+
+        }
+        addKeyClosure(arglist, "--format", formats)
+        addKeyClosure(arglist, "--glue", config.conf.glue)
+        //To utilize the output of rerun formatter set system property -Drerun=true
+        //tags will be disabled
+        if (System.getProperty("rerun") == "true") {
+            String rerunFileContents = new File(project.ext.get("rerunFile")).text
+            println("Rerun failed tests: " + rerunFileContents)
+            if (rerunFileContents != "") {
+                def features = rerunFileContents.split(' ')
+                features.each { i ->
+                    arglist.add("classpath:" + i)
+                }
+            } else {
+                println("No failed tests to rerun")
+            }
+        }
+        //Not using rerun formatter (tags enabled):
+        else {
+            addKeyClosure(arglist, "--tags", config.conf.tags)
+            arglist.add(config.conf.path)
+        }
+        args = arglist
+        //Output the full command line for debugging purposes
+        println("Execute command: " + commandLine)
+    }
+}
